@@ -7,6 +7,7 @@ from openai import OpenAI
 from flask import Flask, request, jsonify
 from utils.supabase_tools import alltransactions, addtransactions, get_conversation_id, update_conversation_id, get_user
 from utils.prompt import INSTRUCTIONS
+from utils.pdf_processor import process_pdf_document
 
 load_dotenv()
 
@@ -178,6 +179,86 @@ def webhook():
                     
                     send_whatsapp_message(destination, "Desculpe, tive um problema ao processar sua imagem.", is_group=is_group)
 
+            # Processar documento PDF se presente
+            if 'document' in data:
+                try:
+                    document_data = data.get('document', {})
+                    document_url = document_data.get('documentUrl', '')
+                    mime_type = document_data.get('mimeType', '')
+                    file_name = document_data.get('fileName', '')
+                    caption = document_data.get('caption', '')
+
+                    print(f"DEBUG - Documento recebido: {file_name}, Tipo: {mime_type}")
+
+                    if mime_type == 'application/pdf' and document_url:
+                        print(f"DEBUG - Processando PDF: {document_url}")
+                        
+                        # Processar o PDF
+                        pdf_result = process_pdf_document(document_url)
+                        
+                        if pdf_result["success"]:
+                            pdf_text = pdf_result["text"]
+                            pdf_analysis = pdf_result["analysis"]
+                            
+                            # Criar conteúdo para o AI com informações do PDF
+                            pdf_content = f"DOCUMENTO PDF ANALISADO:\n"
+                            pdf_content += f"Nome do arquivo: {file_name}\n"
+                            if caption and caption.strip():
+                                pdf_content += f"Legenda: {caption}\n"
+                            pdf_content += f"Tipo de documento identificado: {pdf_analysis.get('document_type', 'desconhecido')}\n"
+                            pdf_content += f"Nível de confiança: {pdf_analysis.get('confidence', 'baixo')}\n\n"
+                            
+                            # Adicionar informações-chave
+                            if pdf_analysis.get('key_information'):
+                                pdf_content += "INFORMAÇÕES PRINCIPAIS:\n"
+                                for info in pdf_analysis['key_information']:
+                                    pdf_content += f"- {info}\n"
+                                pdf_content += "\n"
+                            
+                            # Adicionar texto extraído (limitado para não sobrecarregar)
+                            if len(pdf_text) > 2000:
+                                pdf_content += f"CONTEÚDO DO DOCUMENTO (primeiros 2000 caracteres):\n{pdf_text[:2000]}..."
+                            else:
+                                pdf_content += f"CONTEÚDO DO DOCUMENTO:\n{pdf_text}"
+                            
+                            # Se há uma transação potencial identificada, incluir na mensagem
+                            if pdf_analysis.get('potential_transaction'):
+                                transaction = pdf_analysis['potential_transaction']
+                                pdf_content += f"\n\nTRANSAÇÃO SUGERIDA AUTOMATICAMENTE:\n"
+                                pdf_content += f"- Valor: R$ {transaction['amount']:.2f}\n"
+                                pdf_content += f"- Descrição: {transaction['description']}\n"
+                                pdf_content += f"- Categoria: {transaction['category']}\n"
+                                pdf_content += f"- Tipo: {transaction['type']}\n"
+                                pdf_content += f"- Método de pagamento: {transaction['payment_method']}\n"
+                                pdf_content += "\nPor favor, analise estas informações e confirme se devo registrar esta transação."
+                            
+                            # Adicionar ao conteúdo que será enviado para o AI
+                            content.append({"type": "input_text", "text": pdf_content})
+                            
+                        else:
+                            error_msg = pdf_result.get("error", "Erro desconhecido")
+                            print(f"DEBUG - Erro ao processar PDF: {error_msg}")
+                            
+                            # Informar erro ao usuário
+                            destination = sender
+                            if is_group:
+                                destination = sender
+                            
+                            send_whatsapp_message(destination, 
+                                f"Recebi seu documento PDF '{file_name}', mas tive dificuldades para analisá-lo: {error_msg}", 
+                                is_group=is_group)
+                    else:
+                        print(f"DEBUG - Documento não é PDF ou URL inválida. Tipo: {mime_type}")
+                        
+                except Exception as e:
+                    print(f"DEBUG - Erro ao processar documento PDF: {str(e)}")
+
+                    destination = sender
+                    if is_group:
+                        destination = sender 
+                    
+                    send_whatsapp_message(destination, "Desculpe, tive um problema ao processar seu documento PDF.", is_group=is_group)
+
             if content:
                 try:
                     tools = [
@@ -257,4 +338,4 @@ def webhook():
     return jsonify({"status": "success"})
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True)

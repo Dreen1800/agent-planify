@@ -3,3 +3,5 @@ openai
 dotenv 
 requests
 supabase
+PyPDF2
+pdfplumber
