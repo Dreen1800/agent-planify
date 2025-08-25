@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  planify-agent:
+    build: .
+    container_name: planify-agent
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_ENV=production
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - planify-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: planify-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - planify-agent
+    networks:
+      - planify-network
+
+networks:
+  planify-network:
+    driver: bridge

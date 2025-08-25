@@ -2,6 +2,7 @@ import os
 import requests
 import base64
 import json
+from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 from flask import Flask, request, jsonify
@@ -76,6 +77,15 @@ def execute_tool_function(function_name, arguments, sender=None):
     elif function_name == 'get_user':
         return get_user(arguments['user_email'])
     return {"error": f"Função '{function_name}' não encontrada"}
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Endpoint de health check para monitoramento"""
+    return jsonify({
+        "status": "healthy",
+        "service": "Planify Agent",
+        "timestamp": str(datetime.now())
+    })
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
