@@ -9,6 +9,7 @@ from flask import Flask, request, jsonify
 from utils.supabase_tools import alltransactions, addtransactions, get_conversation_id, update_conversation_id, get_user
 from utils.prompt import INSTRUCTIONS
 from utils.pdf_processor import process_pdf_document
+from utils.audio_processor import process_audio_message
 
 load_dotenv()
 
@@ -268,6 +269,59 @@ def webhook():
                         destination = sender 
                     
                     send_whatsapp_message(destination, "Desculpe, tive um problema ao processar seu documento PDF.", is_group=is_group)
+
+            # Processar mensagem de áudio se presente
+            if 'audio' in data:
+                try:
+                    audio_data = data.get('audio', {})
+                    audio_url = audio_data.get('audioUrl', '')
+                    mime_type = audio_data.get('mimeType', '')
+                    
+                    print(f"DEBUG - Áudio recebido: URL={audio_url}, Tipo: {mime_type}")
+
+                    if audio_url:
+                        print(f"DEBUG - Processando áudio: {audio_url}")
+                        
+                        # Processar o áudio com Whisper
+                        audio_result = process_audio_message(audio_url, api_key)
+                        
+                        if audio_result["success"]:
+                            transcription = audio_result["transcription"]
+                            
+                            print(f"DEBUG - Transcrição obtida: {transcription}")
+                            
+                            # Adicionar transcrição ao conteúdo para processamento pelo AI
+                            audio_content = f"MENSAGEM DE ÁUDIO TRANSCRITA:\n{transcription}"
+                            content.append({"type": "input_text", "text": audio_content})
+                            
+                        else:
+                            error_msg = audio_result.get("error", "Erro desconhecido")
+                            print(f"DEBUG - Erro ao processar áudio: {error_msg}")
+                            
+                            # Informar erro ao usuário de forma amigável
+                            destination = sender
+                            if is_group:
+                                destination = sender
+                            
+                            # Simplificar mensagem de erro para o usuário
+                            user_error_msg = "Recebi seu áudio, mas não consegui processá-lo. Pode tentar enviar novamente ou digitar a mensagem?"
+                            if "Invalid file format" in error_msg:
+                                user_error_msg = "Formato de áudio não suportado. Tente gravar novamente ou envie como mensagem de texto."
+                            elif "muito grande" in error_msg.lower():
+                                user_error_msg = "Áudio muito longo. Envie um áudio mais curto ou divida em partes menores."
+                            
+                            send_whatsapp_message(destination, user_error_msg, is_group=is_group)
+                    else:
+                        print(f"DEBUG - URL de áudio inválida")
+                        
+                except Exception as e:
+                    print(f"DEBUG - Erro ao processar mensagem de áudio: {str(e)}")
+
+                    destination = sender
+                    if is_group:
+                        destination = sender 
+                    
+                    send_whatsapp_message(destination, "Desculpe, tive um problema ao processar seu áudio.", is_group=is_group)
 
             if content:
                 try:
