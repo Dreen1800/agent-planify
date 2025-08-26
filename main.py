@@ -383,17 +383,25 @@ def webhook():
                     user_name = data.get('senderName', '') if is_group else chat_name
                     update_conversation_id(conversation_id, response.id, user_name=user_name)
 
-                    destination = sender 
+                    destination = sender
 
                     response_text = response.output_text
                     if is_group and participant_phone:
-
                         pass
-                    
+
+                    print(f"DEBUG - Resposta do AI: '{response_text}'")
                     print(f"DEBUG - Preparando para enviar resposta: '{response_text}'")
-                    
+
                     result = send_whatsapp_message(destination, response_text, is_group=is_group)
                     print(f"DEBUG - Mensagem enviada para {'grupo' if is_group else 'usuário'}: {result}")
+
+                    # Verificar se foi um registro bem-sucedido
+                    if "✅ Registrado" in response_text or "registrado como" in response_text.lower():
+                        print("DEBUG - ✅ TRANSAÇÃO REGISTRADA COM SUCESSO!")
+                    elif "Registrando" in response_text:
+                        print("DEBUG - 🔄 PROCESSANDO REGISTRO DE TRANSAÇÃO...")
+                    elif "confirma" in response_text.lower() or "devo prosseguir" in response_text.lower():
+                        print("DEBUG - ❓ SISTEMA PEDINDO CONFIRMAÇÃO")
                     
                 except Exception as e:
                     print(f"DEBUG - Erro ao processar mensagem: {str(e)}")
